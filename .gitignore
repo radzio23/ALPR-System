@@ -1,0 +1,8 @@
+# Pliki systemowe i tymczasowe
+__pycache__/
+*.pyc
+.vscode/
+.idea/
+
+# Wyniki działania programu (tego nie wrzucamy, każdy sobie wygeneruje)
+results/
