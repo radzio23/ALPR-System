@@ -1,1 +1,230 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[polish]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{float}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+
+\title{
+    \textbf{System Rozpoznawania Tablic Rejestracyjnych (ALPR)}\\
+    Dokumentacja projektu
+}
+\author{Anna Kilińska, Urszula Nowak, Alicja Borek, Radosław Firlej}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+
+% ---------------------------------------------------------
+\section{Wprowadzenie}
+
+Celem projektu jest stworzenie systemu ALPR (Automatic License Plate Recognition), który automatycznie wykrywa tablicę rejestracyjną na obrazie oraz odczytuje jej numer. 
+
+% ---------------------------------------------------------
+\section{Narzędzia i środowisko}
+
+\subsection{Python}
+Język programowania użyty do implementacji całego systemu.
+
+\subsection{OpenCV}
+Biblioteka do przetwarzania obrazu wykorzystywana m.in. do:
+\begin{itemize}
+    \item wczytywania obrazów,
+    \item konwersji do skali szarości,
+    \item filtracji i binaryzacji,
+    \item detekcji konturów,
+    \item operacji morfologicznych.
+\end{itemize}
+
+\subsection{Haar Cascade}
+Gotowy klasyfikator \texttt{haarcascade\_plate.xml} służący do detekcji tablic rejestracyjnych.  
+Model został wcześniej wytrenowany metodą AdaBoost na zbiorze zdjęć tablic.
+
+\subsection{Tesseract OCR}
+Silnik OCR używany do rozpoznawania znaków.  
+W projekcie zastosowano:
+\begin{itemize}
+    \item tryb \texttt{--psm 7} (pojedyncza linia tekstu),
+    \item whitelist znaków (A--Z, 0--9),
+    \item poprawki dla polskich tablic.
+\end{itemize}
+
+% ---------------------------------------------------------
+\section{Struktura projektu}
+
+\begin{verbatim}
+src/
+    main.py
+    detector.py
+    preprocessing.py
+    ocr.py
+    utils.py
+    haarcascade_plate.xml
+
+data/
+    test_samples/
+\end{verbatim}
+
+\subsection{Opis modułów}
+
+\begin{itemize}
+    \item \textbf{main.py} – główny pipeline programu.
+    \item \textbf{detector.py} – detekcja tablic (Haar + kontury).
+    \item \textbf{preprocessing.py} – przygotowanie ROI do OCR.
+    \item \textbf{ocr.py} – logika OCR i poprawki polskich tablic.
+    \item \textbf{utils.py} – funkcje pomocnicze.
+\end{itemize}
+
+% ---------------------------------------------------------
+\section{Opis działania systemu}
+
+\subsection{1. Detekcja tablicy}
+System wykorzystuje dwa podejścia:
+\begin{enumerate}
+    \item \textbf{Haar Cascade} – szybka detekcja prostokątów o proporcjach tablicy.
+    \item \textbf{Analiza konturów} – metoda zapasowa, gdy Haar nie wykryje tablicy.
+\end{enumerate}
+
+\subsection{2. Preprocessing}
+Wycięty fragment tablicy jest:
+\begin{itemize}
+    \item powiększany,
+    \item konwertowany do skali szarości,
+    \item wygładzany filtrem Gaussa,
+    \item binaryzowany metodą Otsu,
+    \item automatycznie odwracany, jeśli tło jest ciemne,
+    \item przycinany i otaczany białą ramką.
+\end{itemize}
+
+\subsection{3. OCR}
+Tesseract odczytuje tekst z przygotowanego obrazu.  
+Następnie:
+\begin{itemize}
+    \item usuwane są znaki niealfanumeryczne,
+    \item stosowane są poprawki dla polskich tablic (np. 0→O, 1→I),
+    \item wynik jest oceniany punktowo (scoring).
+\end{itemize}
+
+\subsection{4. Wybór najlepszego wyniku}
+System wybiera wynik o najwyższym score, preferując:
+\begin{itemize}
+    \item długość 4--9 znaków,
+    \item dwie litery na początku,
+    \item poprawny układ liter i cyfr.
+\end{itemize}
+
+% ---------------------------------------------------------
+\section{Algorytmy użyte w projekcie}
+
+W projekcie zastosowano zestaw klasycznych algorytmów przetwarzania obrazu oraz metod rozpoznawania znaków.  
+Poniżej przedstawiono wszystkie kluczowe algorytmy wykorzystane w systemie ALPR.
+
+\subsection{Haar Cascade (detekcja obiektów)}
+Do wykrywania tablic rejestracyjnych wykorzystano klasyfikator Haar Cascade zapisany w pliku 
+\texttt{haarcascade\_plate.xml}.  
+Algorytm opiera się na:
+\begin{itemize}
+    \item cechach Haar,
+    \item klasyfikatorach słabych (weak classifiers),
+    \item metodzie AdaBoost,
+    \item kaskadowej strukturze etapów (cascade stages).
+\end{itemize}
+Model został wytrenowany wcześniej na zbiorze zdjęć tablic i w projekcie pełni rolę detektora obszaru tablicy.
+
+\subsection{Detekcja konturów}
+Jako metoda zapasowa zastosowano klasyczne podejście:
+\begin{enumerate}
+    \item filtracja bilateralna,
+    \item detekcja krawędzi algorytmem Canny’ego,
+    \item wyszukiwanie konturów,
+    \item aproksymacja konturu metodą Ramer–Douglas–Peucker,
+    \item wybór konturu o proporcjach typowych dla tablicy.
+\end{enumerate}
+
+\subsection{Binaryzacja Otsu}
+Do przygotowania obrazu tablicy przed OCR wykorzystano automatyczną binaryzację metodą Otsu, która dobiera próg segmentacji minimalizując wariancję wewnątrzklasową.
+
+\subsection{OCR – Tesseract}
+Rozpoznawanie znaków wykonuje silnik Tesseract OCR.  
+W projekcie użyto:
+\begin{itemize}
+    \item trybu \texttt{--psm 7} (pojedyncza linia tekstu),
+    \item whitelist znaków (A--Z, 0--9),
+    \item algorytmów segmentacji i klasyfikacji znaków wbudowanych w Tesseract.
+\end{itemize}
+
+\subsection{Heurystyki i scoring}
+Po odczycie tekstu zastosowano heurystyki poprawiające wynik:
+\begin{itemize}
+    \item zamiana cyfr na litery i odwrotnie (np. 0↔O, 1↔I),
+    \item preferowanie tablic zaczynających się od dwóch liter,
+    \item preferowanie długości 4--9 znaków,
+    \item wybór najlepszego wyniku na podstawie punktacji.
+\end{itemize}
+
+% ---------------------------------------------------------
+\section{Instrukcja uruchomienia}
+Zawarta również w pliku README.md.
+
+\subsection{Wymagania}
+\begin{itemize}
+    \item Python 3.8+
+    \item Zainstalowany Tesseract OCR
+\end{itemize}
+
+\subsection{Instalacja zależności}
+
+\begin{verbatim}
+pip install opencv-python pytesseract imutils numpy
+\end{verbatim}
+
+\subsection{Konfiguracja Tesseract}
+
+W pliku \texttt{ocr.py} należy ustawić ścieżkę:
+
+\begin{verbatim}
+pytesseract.pytesseract.tesseract_cmd =
+    r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+\end{verbatim}
+
+\subsection{Uruchomienie programu}
+
+\begin{verbatim}
+python src/main.py
+\end{verbatim}
+
+% ---------------------------------------------------------
+\section{Podział pracy}
+
+\begin{itemize}
+    \item Anna Kilińska - ...
+    \item Urszula Nowak - ...
+    \item Alicja Borek – architektura projektu i dokumentacja.
+    \item Radosław Firlej - ...
+\end{itemize}
+
+% ---------------------------------------------------------
+\section{Ograniczenia i problemy}
+
+\begin{itemize}
+    \item Haar Cascade działa słabo przy dużym kącie nachylenia tablicy.
+    \item Tesseract myli niektóre znaki (np. S↔5, O↔0).
+    \item System działa najlepiej na zdjęciach o dobrej jakości.
+    \item Brak obsługi tablic niestandardowych.
+\end{itemize}
+
+% ---------------------------------------------------------
+\section{Wnioski}
+
+Podsumowanie działania systemu, jego skuteczności oraz możliwych kierunków rozwoju (np. YOLO, CNN do OCR, lepszy preprocessing).
+
+% ---------------------------------------------------------
+\end{document}
 
