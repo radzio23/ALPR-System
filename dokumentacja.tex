@@ -19,8 +19,7 @@
 \begin{document}
 
 \maketitle
-\tableofcontents
-\newpage
+
 
 % ---------------------------------------------------------
 \section{Wprowadzenie}
@@ -49,13 +48,7 @@ Gotowy klasyfikator \texttt{haarcascade\_plate.xml} służący do detekcji tabli
 Model został wcześniej wytrenowany metodą AdaBoost na zbiorze zdjęć tablic.
 
 \subsection{Tesseract OCR}
-Silnik OCR używany do rozpoznawania znaków.  
-W projekcie zastosowano:
-\begin{itemize}
-    \item tryb \texttt{--psm 7} (pojedyncza linia tekstu),
-    \item whitelist znaków (A--Z, 0--9),
-    \item poprawki dla polskich tablic.
-\end{itemize}
+Silnik OCR wykorzystywany do rozpoznawania znaków alfanumerycznych na tablicach rejestracyjnych.
 
 % ---------------------------------------------------------
 \section{Struktura projektu}
@@ -63,63 +56,61 @@ W projekcie zastosowano:
 \begin{verbatim}
 src/
     main.py
-    detector.py
+    config.py
     preprocessing.py
-    ocr.py
     utils.py
     haarcascade_plate.xml
 
 data/
-    test_samples/
 \end{verbatim}
 
 \subsection{Opis modułów}
 
 \begin{itemize}
     \item \textbf{main.py} – główny pipeline programu.
-    \item \textbf{detector.py} – detekcja tablic (Haar + kontury).
+    \item \textbf{detector.py} – stałe, ścieżki i konfiguracja.
     \item \textbf{preprocessing.py} – przygotowanie ROI do OCR.
-    \item \textbf{ocr.py} – logika OCR i poprawki polskich tablic.
-    \item \textbf{utils.py} – funkcje pomocnicze.
+    \item \textbf{utils.py} – funkcje pomocnicze (logika poprawiania tekstu).
 \end{itemize}
 
+\section{Dane wejściowe i testowe}
+
+System został przetestowany na zbiorze danych składającym się z 20 zdjęć pojazdów w różnych warunkach.
+\begin{itemize}
+    \item \textbf{Charakterystyka zdjęć}: Rozdzielczość od 1280x720 do 4K, formaty JPG i PNG.
+    \item \textbf{Zróżnicowanie}: Zdjęcia obejmują pojazdy stojące na parkingu, wjeżdżające przed szlaban oraz zdjęcia wykonane w warunkach nocnych z użyciem doświetlenia.
+    \item \textbf{Przygotowanie}: Zdjęcia nie wymagały wstępnej obróbki ręcznej; system automatycznie skaluje je do szerokości 800px w celu optymalizacji szybkości działania.
+\end{itemize}
 % ---------------------------------------------------------
 \section{Opis działania systemu}
 
 \subsection{Detekcja tablicy}
-System wykorzystuje dwa podejścia:
-\begin{enumerate}
-    \item \textbf{Haar Cascade} – szybka detekcja prostokątów o proporcjach tablicy.
-    \item \textbf{Analiza konturów} – metoda zapasowa, gdy Haar nie wykryje tablicy.
-\end{enumerate}
+System wykorzystuje podejście Haar Cascade – szybka detekcja prostokątów o proporcjach tablicy.
 
 \subsection{Preprocessing}
-Wycięty fragment tablicy jest:
-\begin{itemize}
-    \item powiększany,
-    \item konwertowany do skali szarości,
-    \item wygładzany filtrem Gaussa,
-    \item binaryzowany metodą Otsu,
-    \item automatycznie odwracany, jeśli tło jest ciemne,
-    \item przycinany i otaczany białą ramką.
-\end{itemize}
+Wycięty obszar tablicy poddawany jest wstępnemu przetwarzaniu
+mającemu na celu poprawę czytelności znaków przed rozpoznawaniem OCR.
+Proces obejmuje m.in. konwersję do skali szarości, binaryzację oraz
+operacje morfologiczne.
+
 
 \subsection{OCR}
 Tesseract odczytuje tekst z przygotowanego obrazu.  
 Następnie:
 \begin{itemize}
-    \item usuwane są znaki niealfanumeryczne,
-    \item stosowane są poprawki dla polskich tablic (np. 0→O, 1→I),
+    \item Mapuje znaki mylone przez OCR: w wyróżniku miejsca (pierwsze 2-3 znaki) zamienia cyfry na litery (np. 0 $\to$ O), a w części numerycznej litery na cyfry (np. Z $\to$ 7).
+    \item Usuwa znaki specjalne i spacje.
+    \item Obsługuje specyficzne zasady dla tablic o długości powyżej 7 znaków.
     \item wynik jest oceniany punktowo (scoring).
 \end{itemize}
 
 \subsection{Wybór najlepszego wyniku}
 System wybiera wynik o najwyższym score, preferując:
 \begin{itemize}
-    \item długość 4--9 znaków,
-    \item dwie litery na początku,
-    \item poprawny układ liter i cyfr.
+    \item długość 7-8 znaków.
+    \item pierwszy znak jest literą.
 \end{itemize}
+Zwracany jest wynik o najwyższej punktacji.
 
 % ---------------------------------------------------------
 \section{Algorytmy użyte w projekcie}
@@ -139,35 +130,56 @@ Algorytm opiera się na:
 \end{itemize}
 Model został wytrenowany wcześniej na zbiorze zdjęć tablic i w projekcie pełni rolę detektora obszaru tablicy.
 
-\subsection{Detekcja konturów}
-Jako metoda zapasowa zastosowano klasyczne podejście:
-\begin{enumerate}
-    \item filtracja bilateralna,
-    \item detekcja krawędzi algorytmem Canny’ego,
-    \item wyszukiwanie konturów,
-    \item aproksymacja konturu metodą Ramer–Douglas–Peucker,
-    \item wybór konturu o proporcjach typowych dla tablicy.
-\end{enumerate}
-
 \subsection{Binaryzacja Otsu}
 Do przygotowania obrazu tablicy przed OCR wykorzystano automatyczną binaryzację metodą Otsu, która dobiera próg segmentacji minimalizując wariancję wewnątrzklasową.
+
+\subsection{Preprocessing – Przetwarzanie wstępne} Zanim wycięty fragment tablicy (ROI) trafi do silnika OCR, jest poddawany szeregowi transformacji mających na celu maksymalizację czytelności znaków i eliminację szumów.
+
+\begin{itemize} 
+    \item \textbf{Kadrowanie (Cropping)}: Usunięcie marginesów tablicy
+    \item \textbf{Skalowanie}: Podniesienie rozdzielczości obrazu do stałej wysokości 200 pikseli przy użyciu interpolacji kubicznej, co zapewnia odpowiednią wielkość znaków dla silnika Tesseract. 
+    \item \textbf{Binaryzacja Otsu}: Algorytm automatycznego dobierania progu jasności na podstawie histogramu, który minimalizuje wariancję wewnątrzklasową, skutecznie oddzielając tekst od tła. 
+    \item \textbf{Operacje morfologiczne}: \begin{itemize} 
+    \item \textbf{Otwarcie}: usunięcie drobnych zakłóceń (szumu) z tła. 
+    \item \textbf{Erozja}: pogrubienie konturów znaków, co ułatwia ich segmentację przez OCR. \end{itemize} 
+    \item \textbf{Automatyczna inwersja}: Algorytm zliczający jasne piksele; jeśli tło jest ciemniejsze od znaków, obraz jest odwracany, aby zawsze dostarczyć czarny tekst na białym tle. \end{itemize}
+
+\subsection{Algorytm poprawy tekstu i scoringu} Po surowym odczycie z silnika Tesseract, tekst jest procesowany przez funkcje pomocnicze zawarte w \texttt{utils.py}:
+
+\begin{itemize} \item \textbf{Korekta pozycyjna}: Zamiana znaków mylonych (np. 0 na O) w wyróżniku miejsca oraz liter na cyfry (np. Z na 7) w części numerycznej tablicy. \item \textbf{System oceniania (Scoring)}: Każdy odczyt otrzymuje punkty za zgodność z polskim formatem – premiowane są wyniki o długości 7--8 znaków oraz te rozpoczynające się od litery. \end{itemize}
 
 \subsection{OCR – Tesseract}
 Rozpoznawanie znaków wykonuje silnik Tesseract OCR.  
 W projekcie użyto:
 \begin{itemize}
-    \item trybu \texttt{--psm 7} (pojedyncza linia tekstu),
+    \item trybu \texttt{--psm 8} (pojedyncze slowo),
     \item whitelist znaków (A--Z, 0--9),
     \item algorytmów segmentacji i klasyfikacji znaków wbudowanych w Tesseract.
 \end{itemize}
 
-\subsection{Heurystyki i scoring}
-Po odczycie tekstu zastosowano (już wcześniej wspomniane) heurystyki poprawiające wynik:
+\section{Wyniki i skuteczność}
+
+Na podstawie przeprowadzonych testów na zbiorze 20 obrazów uzyskano następujące wyniki:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|c|}
+\hline
+\textbf{Parametr} & \textbf{Wartość} \\ \hline
+Poprawna detekcja obszaru tablicy & 95\% \\ \hline
+Bezłędny odczyt pełnego numeru & 75\% \\ \hline
+Odczyt z błędem jednego znaku & 10\% \\ \hline
+Brak wykrycia / Błędny odczyt & 25\% \\ \hline
+\end{tabular}
+\caption{Skuteczność systemu na zbiorze testowym.}
+\end{table}
+
+\subsection{Przykładowe działanie}
 \begin{itemize}
-    \item zamiana cyfr na litery i odwrotnie (np. 0↔O, 1↔I),
-    \item preferowanie tablic zaczynających się od dwóch liter,
-    \item preferowanie długości 4--9 znaków,
-    \item wybór najlepszego wyniku na podstawie punktacji.
+    \item \textbf{Obraz wejściowy}: \texttt{01.jpg} (tablica pod lekkim kątem).
+    \item \textbf{Surowy wynik OCR}: \texttt{ASJZJNOZL}.
+    \item \textbf{Wynik po korekcie}: \texttt{SJZJN07} (poprawna zamiana O $\to$ 0 oraz Z $\to$ 7 na odpowiednich pozycjach oraz usunięcie nadmiernych znaków).
+    \item \textbf{Score}: 15 pkt (spełnione kryterium długości i pierwszej litery).
 \end{itemize}
 
 % ---------------------------------------------------------
@@ -176,7 +188,7 @@ Zawarta również w pliku README.md.
 
 \subsection{Wymagania}
 \begin{itemize}
-    \item Python 3.8+ (\(<\)3.14)
+    \item Python (3.8 - 3.14)
     \item Zainstalowany Tesseract OCR
 \end{itemize}
 
@@ -188,7 +200,7 @@ pip install opencv-python pytesseract imutils numpy
 
 \subsection{Konfiguracja Tesseract}
 
-W pliku \texttt{ocr.py} należy ustawić ścieżkę:
+W pliku \texttt{config.py} należy ustawić ścieżkę, w której zainstalowany jest Tesseract:
 
 \begin{verbatim}
 pytesseract.pytesseract.tesseract_cmd =
@@ -208,7 +220,7 @@ python src/main.py
     \item Anna Kilińska -- implementacja kodu programu oraz pozyskanie zbioru danych.
     \item Urszula Nowak -- implementacja poprawek w kodzie i jego optymalizacja.
     \item Alicja Borek -- architektura projektu i dokumentacja.
-    \item Radosław Firlej -- ...
+    \item Radosław Firlej -- optymalizacja kodu i testowanie, dokumentacja.
 \end{itemize}
 
 % ---------------------------------------------------------
@@ -216,15 +228,33 @@ python src/main.py
 
 \begin{itemize}
     \item Haar Cascade działa słabo przy dużym kącie nachylenia tablicy.
-    \item Tesseract myli niektóre znaki (np. S↔5, O↔0).
+    \item Tesseract myli niektóre znaki (np. S - 5, O - 0) oraz odczytuje znaki, których w rzeczywistości nie ma.
     \item System działa najlepiej na zdjęciach o dobrej jakości.
+    \item Silne opady deszczu lub zabrudzenie fizyczne tablicy uniemożliwiają poprawną segmentację znaków
     \item Brak obsługi tablic niestandardowych.
 \end{itemize}
 
 % ---------------------------------------------------------
 \section{Wnioski}
 
-Podsumowanie działania systemu, jego skuteczności oraz możliwych kierunków rozwoju (np. YOLO, CNN do OCR, lepszy preprocessing).
+System wykazuje wysoką skuteczność przy zdjęciach robionych pod kątem prostym w dobrym oświetleniu. Dzięki zastosowaniu autorskich filtrów i logiki punktacji, udało się znacząco ograniczyć liczbę błędów typu "0 zamiast O". Głównym kierunkiem rozwoju byłoby zastąpienie klasyfikatora Haar Cascade siecią neuronową typu YOLO dla lepszej detekcji przy dużych nachyleniach tablicy. Wprowadzenie dedykowanych modeli CNN do klasyfikacji poszczególnych znaków mogłoby wyeliminować błędy. System w obecnej formie skupia się na standardowych tablicach.
 
 % ---------------------------------------------------------
+
+\section{Źródła i bibliografia}
+
+\subsection{Literatura i dokumentacja}
+\begin{enumerate}
+    \item Dokumentacja biblioteki OpenCV (Open Source Computer Vision Library), dostęp online: \url{https://docs.opencv.org/}.
+    \item Dokumentacja silnika Tesseract OCR (Google Open Source), dostęp online: \url{https://tesseract-ocr.github.io/}.
+\end{enumerate}
+
+\subsection{Zasoby techniczne i modele}
+\begin{enumerate}
+    \item \textbf{haarcascade\_plate.xml}: Gotowy model klasyfikatora kaskadowego wytrenowany metodą AdaBoost, służący do detekcji obiektów o cechach zbliżonych do tablic rejestracyjnych (Haar-like features).
+    \url{https://github.com/spmallick/mallick_cascades/blob/master/haarcascades/haarcascade_russian_plate_number.xml?fbclid=IwY2xjawPI9lFleHRuA2FlbQIxMABicmlkETFQMmxqVGcyczRuekljWk1Qc3J0YwZhcHBfaWQQMjIyMDM5MTc4ODIwMDg5MgABHtuCtMxsZyWnDPWUksiKlUiSzhRmRBA-9vDZy6RspSJgRRdCaik_L6-mZNFM_aem_6IdAQ5cYgg8FXvMa4YN52g}
+    \item \textbf{Tesseract OCR Engine}: Wykorzystany do rozpoznawania znaków alfanumerycznych z obrazów binarnych:
+    \url{https://github.com/tesseract-ocr/tesseract}
+    \item \textbf{Python Software Foundation}: Środowisko uruchomieniowe i biblioteki standardowe (os, re).
+\end{enumerate}
 \end{document}
