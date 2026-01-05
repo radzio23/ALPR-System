@@ -6,7 +6,7 @@ Projekt realizuje automatyczne rozpoznawanie tablic rejestracyjnych (ALPR) z uż
 
 - Python 3.8+
 - Zainstalowany Tesseract OCR  
-  (Windows: https://github.com/tesseract-ocr/tesseract)
+  (https://github.com/tesseract-ocr/tesseract/wiki/Home/184342af4939bfdac749fee3337b84145dc00bdb)
 
 ## 2. Instalacja zależności
 
@@ -21,3 +21,4 @@ pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tessera
 
 ## 4. Uruchomienie programu
 python src/main.py
+
