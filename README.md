@@ -10,7 +10,7 @@ This project provides an automated solution for detecting and reading vehicle li
 ## 2. Installation
 Clone the repository and install the required Python dependencies using pip:
 ```
-pip install opencv-python pytesseract imutils numpy
+pip install -r requirements.txt
 ```
 ## 3. Configuration
    
@@ -28,4 +28,5 @@ python src/main.py
 *Edge Detection: We use Canny edge detection to find the outlines of objects.
 *Contour Filtering: The algorithm searches for rectangular shapes that match the proportions of a license plate.
 *OCR: Tesseract extracts the alphanumeric characters from the identified region.
+
 
